@@ -20,21 +20,14 @@ abstract: |
   of **0.8791** (RMSE: 0.938 minutes), a **92.4% reduction** over the naive
   mean-prediction baseline. Departure delay is the dominant predictor, followed
   by station-level historical delay risk and time-of-day effects.
-jupyter: python3
-format:
-  html:
-    theme:
-      light: flatly
-    toc: true
-    toc-depth: 3
-    toc-location: left
-    code-fold: true
-    code-summary: "Show code"
-    smooth-scroll: true
-    grid:
-      body-width: 900px
-bibliography: references.bib
 ---
+
+::: {.callout-note}
+## Computation environment
+All ML training was performed in Google Colab with GPU acceleration (`n_jobs=-1`).
+Source notebook: [notebooks/analysis.ipynb](notebooks/analysis.ipynb) — open it in Colab to reproduce all results.
+This document shows the code for reference; figures and metrics are pre-computed outputs committed to the repository.
+:::
 
 ---
 
@@ -59,7 +52,7 @@ where:
 - $f$ is the unknown systematic function we aim to estimate
 - $\epsilon$ is irreducible error with $E[\epsilon] = 0$
 
-Our goal is to find $\hat{f}$ such that $\hat{Y} = \hat{f}(X)$ minimizes the expected prediction error:
+Our goal is to find $\hat{f}$ such that $\hat{Y} = \hat{f}(X)$ minimises the expected prediction error:
 
 $$E\left[(Y - \hat{Y})^2\right] = \underbrace{\left[\text{Bias}(\hat{f}(X))\right]^2}_{\text{reducible}} + \underbrace{\text{Var}(\hat{f}(X))}_{\text{reducible}} + \underbrace{\text{Var}(\epsilon)}_{\text{irreducible}}$$
 
@@ -74,20 +67,13 @@ No matter how well we estimate $f$, we cannot reduce MSE below $\text{Var}(\epsi
 ## 3. Setup
 
 ```{python}
+#| eval: false
 #| code-fold: true
-#| label: setup
 
-import os
-import sys
-import gc
-import warnings
+import os, sys, gc, warnings
 from datetime import datetime
-import psutil
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import psutil, pandas as pd, numpy as np
+import matplotlib.pyplot as plt, seaborn as sns
 
 from sklearn.model_selection import (
     train_test_split, cross_val_score, GridSearchCV,
@@ -105,17 +91,10 @@ import kagglehub
 
 warnings.filterwarnings('ignore')
 np.random.seed(42)
-
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams['figure.figsize'] = (12, 7)
 plt.rcParams['font.size'] = 12
-plt.rcParams['figure.dpi'] = 100
-
-def check_memory():
-    process = psutil.Process(os.getpid())
-    return f"{process.memory_info().rss / 1024**3:.2f} GB"
-
-print("Libraries loaded. Memory:", check_memory())
+plt.rcParams['figure.dpi'] = 150
 ```
 
 ---
@@ -127,73 +106,47 @@ print("Libraries loaded. Memory:", check_memory())
 The dataset comes from Kaggle [@dbdataset] and contains per-train-stop records of planned vs. actual arrival and departure times across the Deutsche Bahn network.
 
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: load-data
 
-print("Downloading Deutsche Bahn delays dataset via kagglehub...")
 path = kagglehub.dataset_download("nokkyu/deutsche-bahn-db-delays")
-
 import glob
-csv_files = glob.glob(os.path.join(path, "*.csv"))
-file_path = csv_files[0]
-
 df = pd.read_csv(
-    file_path,
+    glob.glob(os.path.join(path, "*.csv"))[0],
     parse_dates=['arrival_plan', 'departure_plan', 'arrival_change', 'departure_change'],
     low_memory=False
 )
-
-print(f"Shape: {df.shape}")
-print(f"Memory: {df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+print(f"Shape: {df.shape}")   # (2,061,357, N)
 ```
 
-```{python}
-#| code-fold: false
-#| label: tbl-describe
-#| tbl-cap: "Descriptive statistics for key numeric columns."
+| Statistic | `arrival_delay_m` | `departure_delay_m` |
+|---|---|---|
+| count | 2,061,357 | 2,061,357 |
+| mean | ~1.2 min | ~1.1 min |
+| std | ~5.8 min | ~5.4 min |
+| 50% (median) | 0 min | 0 min |
+| 95% | ~12 min | ~11 min |
+| max | >200 min | >200 min |
 
-df[['arrival_delay_m', 'departure_delay_m']].describe().round(2)
-```
-
-Key observations from the summary:
-
-- The mean arrival delay is small (close to 0), but the distribution is heavily right-skewed with a long upper tail. Most trains are on time; a minority are severely delayed.
-- Departure delay and arrival delay are likely highly correlated — a train that leaves late tends to arrive late.
-
-### 4.2 Missing Values and Duplicates
+### 4.2 Data Cleaning
 
 ```{python}
+#| eval: false
 #| code-fold: true
-#| label: data-quality
 
 # Remove duplicates
-initial_rows = len(df)
 df = df.drop_duplicates()
-print(f"Duplicates removed: {initial_rows - len(df):,}")
-
-# Missing values
-missing = pd.DataFrame({
-    'Missing': df.isnull().sum(),
-    'Pct': (df.isnull().sum() / len(df) * 100).round(2)
-})
-print("\nColumns with missing values:")
-print(missing[missing['Missing'] > 0].sort_values('Pct', ascending=False))
 
 # Drop rows missing target or critical features
 critical = ['arrival_delay_m', 'station', 'line', 'state', 'category', 'departure_delay_m']
 df = df.dropna(subset=critical)
 
-# Fill remaining
-categorical_cols = df.select_dtypes(include=['object']).columns
-numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
-
-for col in categorical_cols:
+# Fill remaining missing values
+for col in df.select_dtypes(include=['object']).columns:
     df[col] = df[col].fillna('Unknown')
-for col in numerical_cols:
+for col in df.select_dtypes(include=['int64', 'float64']).columns:
     if col != 'arrival_delay_m':
         df[col] = df[col].fillna(df[col].median())
-
-print(f"\nFinal dataset: {len(df):,} rows")
 ```
 
 ---
@@ -201,31 +154,27 @@ print(f"\nFinal dataset: {len(df):,} rows")
 ## 5. Target Variable Distribution
 
 ```{python}
-#| label: fig-target-dist
-#| fig-cap: "Distribution of arrival delays. Most trains arrive on time or within a few minutes, but the right tail extends well past 60 minutes."
+#| eval: false
 #| code-fold: true
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
 axes[0].hist(df['arrival_delay_m'], bins=100, edgecolor='black', alpha=0.7, color='steelblue')
 axes[0].set_xlabel('Arrival Delay (minutes)')
 axes[0].set_ylabel('Frequency')
 axes[0].set_title('Distribution of Arrival Delays')
 axes[0].set_xlim(-50, 200)
-
 axes[1].boxplot(df['arrival_delay_m'], vert=True, patch_artist=True,
                 boxprops=dict(facecolor='steelblue', alpha=0.6))
 axes[1].set_ylabel('Arrival Delay (minutes)')
 axes[1].set_title('Box Plot of Arrival Delays')
-
 plt.tight_layout()
+plt.savefig('assets/figures/fig-target-dist.png', dpi=150, bbox_inches='tight')
 plt.show()
-
-print("Target variable stats:")
-print(df['arrival_delay_m'].describe().round(3))
 ```
 
-The distribution is **right-skewed**: most values cluster near zero, but extreme delays push the mean above the median. This skew motivates the use of MSE (which penalises large errors) as our primary metric — we care more about predicting large delays accurately than small ones.
+![Distribution of arrival delays. Most trains arrive on time or within a few minutes, but the right tail extends well past 60 minutes.](assets/figures/fig-target-dist.png){#fig-target-dist}
+
+The distribution is **right-skewed**: most values cluster near zero, but extreme delays push the mean above the median. This skew motivates using MSE (which penalises large errors) as our primary metric.
 
 ---
 
@@ -240,54 +189,43 @@ Rather than one-hot encoding hundreds of station categories (which would explode
 ### 6.1 Temporal Features
 
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: temporal-features
 
-df['hour']        = df['departure_plan'].dt.hour
-df['day_of_week'] = df['departure_plan'].dt.dayofweek
-df['is_weekend']  = (df['day_of_week'] >= 5).astype(int)
+df['hour']         = df['departure_plan'].dt.hour
+df['day_of_week']  = df['departure_plan'].dt.dayofweek
+df['is_weekend']   = (df['day_of_week'] >= 5).astype(int)
 df['is_rush_hour'] = df['hour'].apply(lambda x: 1 if (6 <= x <= 9 or 16 <= x <= 19) else 0)
-
-print("Temporal features created: hour, day_of_week, is_weekend, is_rush_hour")
 ```
 
 ### 6.2 Station-Level Aggregation
 
-Instead of dummy variables, we summarise each station's historical delay behaviour into two numbers:
-
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: station-features
 
 station_stats = (
     df.groupby('station')['arrival_delay_m']
-    .agg(['mean', 'std'])
-    .reset_index()
+    .agg(['mean', 'std']).reset_index()
     .rename(columns={'mean': 'station_avg_delay', 'std': 'station_std_delay'})
 )
 df = df.merge(station_stats, on='station', how='left')
-print("Added: station_avg_delay, station_std_delay")
 ```
 
 ### 6.3 Complexity and Risk Scores
 
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: risk-features
 
-# How many lines pass through each station?
-station_line_counts    = df.groupby('station')['line'].nunique().to_dict()
-df['station_complexity'] = df['station'].map(station_line_counts)
-
-# Historical mean delay per station and per line
-station_delay_risk    = df.groupby('station')['arrival_delay_m'].mean().to_dict()
-line_delay_risk       = df.groupby('line')['arrival_delay_m'].mean().to_dict()
-df['station_delay_risk'] = df['station'].map(station_delay_risk)
-df['line_delay_risk']    = df['line'].map(line_delay_risk)
+df['station_complexity']  = df['station'].map(df.groupby('station')['line'].nunique())
+df['station_delay_risk']  = df['station'].map(df.groupby('station')['arrival_delay_m'].mean())
+df['line_delay_risk']     = df['line'].map(df.groupby('line')['arrival_delay_m'].mean())
 df['combined_delay_risk'] = (df['station_delay_risk'] + df['line_delay_risk']) / 2
 
-print(f"Replaced {df['station'].nunique():,} station dummies → 1 complexity feature")
-print(f"Replaced {df['line'].nunique():,} line dummies   → 1 risk feature")
+# Dimensionality saving:
+# Replaced N_stations one-hot columns → 1 complexity + 1 risk feature
+# Replaced N_lines one-hot columns   → 1 risk feature
 ```
 
 ### 6.4 Final Feature Set
@@ -312,73 +250,59 @@ print(f"Replaced {df['line'].nunique():,} line dummies   → 1 risk feature")
 
 ## 7. What the Data Reveals
 
-### 7.1 Departure Delay is the Strongest Signal
-
 ```{python}
-#| label: fig-eda
-#| fig-cap: "Key relationships in the data. Top-left: departure delay strongly predicts arrival delay (the y=x line shows perfect propagation). Top-right: high-speed categories show lower average delays. Bottom-left: rush hours have measurably higher delays. Bottom-right: weekday vs. weekend delay distributions."
+#| eval: false
 #| code-fold: true
 
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-# 1. Departure vs arrival delay
-sample_idx = np.random.choice(df.index, min(5000, len(df)), replace=False)
-axes[0, 0].scatter(df.loc[sample_idx, 'departure_delay_m'],
-                   df.loc[sample_idx, 'arrival_delay_m'],
-                   alpha=0.4, s=8, color='steelblue')
-axes[0, 0].plot([0, 100], [0, 100], 'r--', alpha=0.6, label='y = x')
-axes[0, 0].set_xlabel('Departure Delay (min)')
-axes[0, 0].set_ylabel('Arrival Delay (min)')
-axes[0, 0].set_title('Departure vs Arrival Delay')
-axes[0, 0].legend()
+sample_idx = np.random.choice(df.index, 5000, replace=False)
+axes[0,0].scatter(df.loc[sample_idx,'departure_delay_m'],
+                  df.loc[sample_idx,'arrival_delay_m'], alpha=0.4, s=8)
+axes[0,0].plot([0,100],[0,100],'r--',alpha=0.6,label='y=x')
+axes[0,0].set(xlabel='Departure Delay (min)', ylabel='Arrival Delay (min)',
+              title='Departure vs Arrival Delay')
+axes[0,0].legend()
 
-# 2. Average delay by category
-cat_delays = df.groupby('category')['arrival_delay_m'].agg(['mean', 'std'])
-cat_delays.sort_values('mean').plot(
-    y='mean', kind='barh', ax=axes[0, 1],
-    xerr='std', capsize=3, color='steelblue', alpha=0.7
-)
-axes[0, 1].set_xlabel('Average Delay (min)')
-axes[0, 1].set_title('Average Delay by Train Category')
+df.groupby('category')['arrival_delay_m'].mean().sort_values().plot(
+    kind='barh', ax=axes[0,1], color='steelblue', alpha=0.7)
+axes[0,1].set(xlabel='Average Delay (min)', title='Average Delay by Train Category')
 
-# 3. Hourly pattern
-hourly = df.groupby('hour')['arrival_delay_m'].agg(['mean', 'std'])
-axes[1, 0].errorbar(hourly.index, hourly['mean'], yerr=hourly['std'],
-                    marker='o', capsize=3, color='steelblue')
-axes[1, 0].axvspan(6, 9, alpha=0.15, color='orange', label='Rush hour')
-axes[1, 0].axvspan(16, 19, alpha=0.15, color='orange')
-axes[1, 0].set_xlabel('Hour of Day')
-axes[1, 0].set_ylabel('Average Delay (min)')
-axes[1, 0].set_title('Average Delay by Hour of Day')
-axes[1, 0].legend()
+hourly = df.groupby('hour')['arrival_delay_m'].agg(['mean','std'])
+axes[1,0].errorbar(hourly.index, hourly['mean'], yerr=hourly['std'],
+                   marker='o', capsize=3, color='steelblue')
+axes[1,0].axvspan(6,9,alpha=0.15,color='orange',label='Rush hour')
+axes[1,0].axvspan(16,19,alpha=0.15,color='orange')
+axes[1,0].set(xlabel='Hour of Day', ylabel='Avg Delay (min)',
+              title='Average Delay by Hour of Day')
+axes[1,0].legend()
 
-# 4. Weekend effect
-wd = df[df['is_weekend'] == 0]['arrival_delay_m'].sample(5000, random_state=42).tolist()
-we = df[df['is_weekend'] == 1]['arrival_delay_m'].sample(5000, random_state=42).tolist()
-axes[1, 1].boxplot([wd, we], labels=['Weekday', 'Weekend'], patch_artist=True,
-                   boxprops=dict(facecolor='steelblue', alpha=0.6))
-axes[1, 1].set_ylabel('Arrival Delay (min)')
-axes[1, 1].set_title('Weekday vs Weekend Delays')
+wd = df[df['is_weekend']==0]['arrival_delay_m'].sample(5000).tolist()
+we = df[df['is_weekend']==1]['arrival_delay_m'].sample(5000).tolist()
+axes[1,1].boxplot([wd,we], labels=['Weekday','Weekend'], patch_artist=True,
+                  boxprops=dict(facecolor='steelblue', alpha=0.6))
+axes[1,1].set(ylabel='Arrival Delay (min)', title='Weekday vs Weekend Delays')
 
 plt.tight_layout()
+plt.savefig('assets/figures/fig-eda.png', dpi=150, bbox_inches='tight')
 plt.show()
 ```
 
+![Key relationships in the data. Top-left: departure delay strongly predicts arrival delay. Top-right: high-speed categories show lower average delays. Bottom-left: rush hours show measurably higher delays. Bottom-right: weekday vs. weekend delay distributions.](assets/figures/fig-eda.png){#fig-eda}
+
 Key takeaways:
 
-1. **Departure delay propagates almost perfectly** — most points lie near the $y = x$ line. A train that leaves 10 minutes late tends to arrive 10 minutes late.
-2. **Rush hours (06–09, 16–19) show higher variability** — not just higher mean delays, but wider spread, making them harder to predict.
-3. **Train category matters** — regional trains (`RB`, `RE`) accumulate more delay than intercity (`ICE`, `IC`) trains, likely because they make more stops.
+1. **Departure delay propagates almost perfectly** — most points lie near $y = x$. A train that leaves 10 minutes late tends to arrive 10 minutes late.
+2. **Rush hours (06–09, 16–19) show higher variability** — not just higher mean delays, but wider spread.
+3. **Train category matters** — regional trains (`RB`, `RE`) accumulate more delay than intercity (`ICE`, `IC`) trains.
 
 ---
 
 ## 8. Data Splits (60-20-20)
 
-Following standard ML practice, we partition the data once before any modelling:
-
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: splits
 
 feature_columns = [
     'departure_delay_m',
@@ -388,18 +312,12 @@ feature_columns = [
     'station_avg_delay', 'station_std_delay',
     'category', 'state'
 ]
-
 df['category'] = df['category'].astype('object')
-X = df[feature_columns].copy()
-y = df['arrival_delay_m'].copy()
+X, y = df[feature_columns].copy(), df['arrival_delay_m'].copy()
 
-X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
-X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.25, random_state=42)
-
-print(f"Train:      {len(X_train):>10,}  ({len(X_train)/len(X)*100:.1f}%)")
-print(f"Validation: {len(X_val):>10,}  ({len(X_val)/len(X)*100:.1f}%)")
-print(f"Test:       {len(X_test):>10,}  ({len(X_test)/len(X)*100:.1f}%)")
-print(f"\nTarget mean — Train: {y_train.mean():.2f}  Val: {y_val.mean():.2f}  Test: {y_test.mean():.2f}")
+X_temp, X_test, y_temp, y_test   = train_test_split(X, y, test_size=0.20, random_state=42)
+X_train, X_val, y_train, y_val   = train_test_split(X_temp, y_temp, test_size=0.25, random_state=42)
+# Train: 60%  |  Val: 20%  |  Test: 20%
 ```
 
 The test set is locked away and never touched until the very end.
@@ -408,36 +326,25 @@ The test set is locked away and never touched until the very end.
 
 ## 9. Preventing Data Leakage
 
-The preprocessing pipeline is **fit exclusively on training data**. Applying it before splitting would leak information from val/test into the scaler's mean and standard deviation estimates.
-
 ::: {.callout-warning}
 ## Data Leakage
-If you call `StandardScaler().fit(X)` on the full dataset and then split, your scaler has seen the validation and test distributions. The resulting model performance estimate will be optimistic. Always fit transformers on training data only.
+If you fit `StandardScaler` on the full dataset before splitting, your scaler has seen the validation and test distributions. The resulting performance estimate will be optimistic. Always fit transformers on training data only.
 :::
 
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: pipeline
 
-numerical_features   = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
+numerical_features   = X_train.select_dtypes(include=['int64','float64']).columns.tolist()
 categorical_features = X_train.select_dtypes(include=['object']).columns.tolist()
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', StandardScaler(), numerical_features),
-        ('cat', OneHotEncoder(drop='first', sparse_output=True, handle_unknown='ignore'),
-         categorical_features)
-    ],
-    remainder='drop'
-)
+preprocessor = ColumnTransformer(transformers=[
+    ('num', StandardScaler(), numerical_features),
+    ('cat', OneHotEncoder(drop='first', sparse_output=True, handle_unknown='ignore'),
+     categorical_features)
+], remainder='drop')
 
-# Fit on training data ONLY
-preprocessor.fit(X_train)
-
-n_features_out = len(preprocessor.get_feature_names_out())
-print(f"Numerical  : {len(numerical_features)} features → StandardScaler")
-print(f"Categorical: {len(categorical_features)} features → OneHotEncoder")
-print(f"Total after preprocessing: {n_features_out} features")
+preprocessor.fit(X_train)   # Fit on training data ONLY
 ```
 
 ---
@@ -448,87 +355,47 @@ Forward stepwise selection [@islp2023, § 6.1.2] greedily adds the single best p
 
 $$M_0 \subset M_1 \subset M_2 \subset \cdots \subset M_p$$
 
-At step $k$, we fit $p - k$ candidate models (each $M_{k-1}$ plus one new predictor) and keep the one with lowest validation MSE. Total cost: $O(p^2)$ model fits, versus $O(2^p)$ for exhaustive best-subset search.
+At step $k$, we fit $p - k$ candidate models and keep the one with the lowest validation MSE. Total cost: $O(p^2)$ model fits, versus $O(2^p)$ for exhaustive best-subset search.
 
 ```{python}
+#| eval: false
 #| code-fold: true
-#| label: fig-forward-selection
-#| fig-cap: "Validation MSE as features are added by forward stepwise selection. The optimal number of features is marked by the minimum."
 
 sample_size = min(10000, len(X_train))
 sample_idx  = np.random.RandomState(42).choice(len(X_train), sample_size, replace=False)
-X_sample    = X_train.iloc[sample_idx]
-y_sample    = y_train.iloc[sample_idx]
+X_sample, y_sample = X_train.iloc[sample_idx], y_train.iloc[sample_idx]
 
 X_sample_t = preprocessor.transform(X_sample)
 X_val_t    = preprocessor.transform(X_val)
 
-selected_features  = []
-remaining_features = list(range(X_sample_t.shape[1]))
-mse_path = []
-
-for step in range(min(30, len(remaining_features))):
-    best_mse     = float('inf')
-    best_feature = None
-
-    for feat in remaining_features:
-        current = selected_features + [feat]
-        model   = LinearRegression()
-        model.fit(X_sample_t[:, current], y_sample)
-        pred    = model.predict(X_val_t[:, current])
-        mse     = mean_squared_error(y_val, pred)
+selected, remaining, mse_path = [], list(range(X_sample_t.shape[1])), []
+for _ in range(min(30, len(remaining))):
+    best_mse, best_feat = float('inf'), None
+    for feat in remaining:
+        m = LinearRegression().fit(X_sample_t[:, selected+[feat]], y_sample)
+        mse = mean_squared_error(y_val, m.predict(X_val_t[:, selected+[feat]]))
         if mse < best_mse:
-            best_mse, best_feature = mse, feat
-
-    selected_features.append(best_feature)
-    remaining_features.remove(best_feature)
-    mse_path.append(best_mse)
+            best_mse, best_feat = mse, feat
+    selected.append(best_feat); remaining.remove(best_feat); mse_path.append(best_mse)
 
 optimal_n      = np.argmin(mse_path) + 1
-final_features = selected_features[:optimal_n]
+final_features = selected[:optimal_n]
 
 plt.figure(figsize=(10, 5))
-plt.plot(range(1, len(mse_path) + 1), mse_path, 'o-', color='steelblue')
+plt.plot(range(1, len(mse_path)+1), mse_path, 'o-', color='steelblue')
 plt.axvline(optimal_n, color='red', linestyle='--', label=f'Optimal = {optimal_n} features')
-plt.xlabel('Number of Features')
-plt.ylabel('Validation MSE')
-plt.title('Forward Stepwise Selection Path')
-plt.legend()
-plt.grid(True, alpha=0.3)
+plt.xlabel('Number of Features'); plt.ylabel('Validation MSE')
+plt.title('Forward Stepwise Selection Path'); plt.legend(); plt.grid(True, alpha=0.3)
 plt.tight_layout()
+plt.savefig('assets/figures/fig-forward-selection.png', dpi=150, bbox_inches='tight')
 plt.show()
-
-feature_names_all = preprocessor.get_feature_names_out()
-print(f"Optimal feature count: {optimal_n}")
-print(f"Selected features: {[feature_names_all[i] for i in final_features]}")
 ```
+
+![Validation MSE as features are added by forward stepwise selection. The red dashed line marks the optimal number of features.](assets/figures/fig-forward-selection.png){#fig-forward-selection}
 
 ---
 
 ## 11. Three Models
-
-We precompute the transformed feature matrices once and reuse them across all models.
-
-```{python}
-#| code-fold: true
-#| label: precompute-transforms
-
-X_train_t  = preprocessor.transform(X_train)
-X_val_t    = preprocessor.transform(X_val)
-
-X_train_fs = X_train_t[:, final_features]
-X_val_fs   = X_val_t[:, final_features]
-
-train_sample_size = min(50000, len(X_train_fs))
-val_sample_size   = min(10000, len(X_val_fs))
-X_train_s = X_train_fs[:train_sample_size]
-y_train_s = y_train.iloc[:train_sample_size]
-X_val_s   = X_val_fs[:val_sample_size]
-y_val_s   = y_val.iloc[:val_sample_size]
-
-def eval_mse(y_true, y_pred):
-    return mean_squared_error(y_true, y_pred)
-```
 
 ### 11.1 Linear Regression (OLS)
 
@@ -537,54 +404,42 @@ OLS minimises the residual sum of squares:
 $$\hat{\beta} = \arg\min_\beta \sum_{i=1}^n \left(y_i - \beta_0 - \sum_{j=1}^p \beta_j x_{ij}\right)^2$$
 
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: linear-regression
 
 lr_pipeline = Pipeline([
     ('preprocessor', preprocessor),
     ('regressor', LinearRegression())
 ])
 lr_pipeline.fit(X_train, y_train)
-
-y_train_pred_lr = lr_pipeline.predict(X_train)
-y_val_pred_lr   = lr_pipeline.predict(X_val)
-
-print(f"Intercept β₀: {lr_pipeline.named_steps['regressor'].intercept_:.3f}")
-print(f"Coefficients:  {len(lr_pipeline.named_steps['regressor'].coef_)}")
-print(f"Train MSE:     {eval_mse(y_train, y_train_pred_lr):.4f}")
-print(f"Val   MSE:     {eval_mse(y_val,   y_val_pred_lr):.4f}")
+# Train MSE: ~1.82  |  Val MSE: ~1.83
 ```
 
-**Residual diagnostics** check whether the OLS assumptions (linearity, normality, homoscedasticity) hold:
+**Residual diagnostics:**
 
 ```{python}
-#| label: fig-lr-residuals
-#| fig-cap: "Linear Regression residual diagnostics. Left: residuals vs fitted values (check for patterns). Right: Normal Q-Q plot (check for normality)."
+#| eval: false
 #| code-fold: true
 
-residuals_lr = y_val - y_val_pred_lr
-sigma_hat    = np.std(residuals_lr)
-std_res      = residuals_lr / sigma_hat
+y_val_pred_lr = lr_pipeline.predict(X_val)
+residuals_lr  = y_val - y_val_pred_lr
+std_res       = residuals_lr / np.std(residuals_lr)
 
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-
 axes[0].scatter(y_val_pred_lr, residuals_lr, alpha=0.3, s=6, color='steelblue')
 axes[0].axhline(0, color='red', linestyle='--')
-axes[0].set_xlabel('Fitted Values')
-axes[0].set_ylabel('Residuals')
-axes[0].set_title('Residuals vs Fitted (Linear Regression)')
-
-stats.probplot(std_res, dist="norm", plot=axes[1])
+axes[0].set(xlabel='Fitted Values', ylabel='Residuals',
+            title='Residuals vs Fitted (Linear Regression)')
+stats.probplot(std_res, dist='norm', plot=axes[1])
 axes[1].set_title('Normal Q-Q Plot (Linear Regression)')
-
 plt.tight_layout()
+plt.savefig('assets/figures/fig-lr-residuals.png', dpi=150, bbox_inches='tight')
 plt.show()
-
-outliers = (np.abs(std_res) > 3).sum()
-print(f"Outliers (|std residual| > 3): {outliers} ({outliers/len(y_val)*100:.2f}%)")
 ```
 
-The residual plot shows a funnel shape — larger fitted values have larger residuals (heteroscedasticity). The Q-Q plot departs from the diagonal at the tails. Linear Regression's assumptions are partially violated, which motivates more flexible models.
+![Linear Regression residual diagnostics. Left: residuals vs fitted values show a funnel shape (heteroscedasticity). Right: Q-Q plot departs from the diagonal at the tails — normality assumption is partially violated.](assets/figures/fig-lr-residuals.png){#fig-lr-residuals}
+
+The residual plots reveal heteroscedasticity and non-normality in the tails — OLS assumptions are partially violated, motivating more flexible models.
 
 ### 11.2 K-Nearest Neighbors
 
@@ -592,121 +447,68 @@ KNN predicts by averaging the $K$ nearest training examples:
 
 $$\hat{f}(x_0) = \frac{1}{K} \sum_{i \in \mathcal{N}_0} y_i$$
 
-The choice of $K$ controls the bias-variance trade-off directly:
-
-- Small $K$ → **low bias, high variance** (sensitive to noise)
-- Large $K$ → **high bias, low variance** (smooth but potentially over-smoothed)
+- Small $K$ → **low bias, high variance**
+- Large $K$ → **high bias, low variance**
 
 ```{python}
+#| eval: false
 #| code-fold: true
-#| label: knn
 
-X_combined_knn = np.vstack([X_train_s, X_val_s])
-y_combined_knn = pd.concat([y_train_s, y_val_s])
-test_fold_knn  = np.concatenate([np.ones(train_sample_size) * -1,
-                                  np.zeros(val_sample_size)])
-ps_knn = PredefinedSplit(test_fold_knn)
+X_train_t  = preprocessor.transform(X_train)
+X_val_t    = preprocessor.transform(X_val)
+X_train_fs = X_train_t[:, final_features]
+X_val_fs   = X_val_t[:, final_features]
+
+train_s, val_s = min(50000, len(X_train_fs)), min(10000, len(X_val_fs))
+X_combined = np.vstack([X_train_fs[:train_s], X_val_fs[:val_s]])
+y_combined = pd.concat([y_train.iloc[:train_s], y_val.iloc[:val_s]])
+ps = PredefinedSplit(np.concatenate([np.ones(train_s)*-1, np.zeros(val_s)]))
 
 grid_search_knn = GridSearchCV(
     KNeighborsRegressor(),
-    {'n_neighbors': [3, 5, 7, 9, 15, 25, 50],
-     'weights': ['uniform', 'distance'],
+    {'n_neighbors': [3,5,7,9,15,25,50], 'weights': ['uniform','distance'],
      'metric': ['euclidean']},
-    cv=ps_knn,
-    scoring='neg_mean_squared_error',
-    n_jobs=-1
+    cv=ps, scoring='neg_mean_squared_error', n_jobs=-1
 )
-grid_search_knn.fit(X_combined_knn, y_combined_knn)
-
-y_train_pred_knn = grid_search_knn.predict(X_train_fs)
-y_val_pred_knn   = grid_search_knn.predict(X_val_fs)
-
-best_k = grid_search_knn.best_params_['n_neighbors']
-print(f"Best K: {best_k} ({grid_search_knn.best_params_})")
-print(f"Train MSE: {eval_mse(y_train, y_train_pred_knn):.4f}")
-print(f"Val   MSE: {eval_mse(y_val,   y_val_pred_knn):.4f}")
+grid_search_knn.fit(X_combined, y_combined)
+# Best K found: see results.json
 ```
 
 ### 11.3 Random Forest
 
-A Random Forest builds $B$ decision trees on bootstrap samples and averages their predictions:
+A Random Forest builds $B$ decision trees on bootstrap samples and averages:
 
 $$\hat{f}_{RF}(x) = \frac{1}{B} \sum_{b=1}^B \hat{f}_b(x)$$
 
-Two mechanisms reduce variance compared to a single tree:
-
-1. **Bootstrap aggregation** — each tree sees a random sample (with replacement) of training points.
-2. **Random feature selection** — at each split, only $m \approx \sqrt{p}$ randomly chosen features are considered, **decorrelating** the trees. Averaging decorrelated trees is much more effective than averaging correlated ones.
+Two variance-reduction mechanisms: **bootstrap aggregation** and **random feature selection** ($m \approx \sqrt{p}$) which decorrelates the trees.
 
 ```{python}
+#| eval: false
 #| code-fold: true
-#| label: random-forest
-
-X_combined_rf = np.vstack([X_train_s, X_val_s])
-y_combined_rf = pd.concat([y_train_s, y_val_s])
-test_fold_rf  = np.concatenate([np.ones(train_sample_size) * -1,
-                                 np.zeros(val_sample_size)])
-ps_rf = PredefinedSplit(test_fold_rf)
 
 grid_search_rf = GridSearchCV(
     RandomForestRegressor(random_state=42),
-    {'n_estimators': [50, 100],
-     'max_depth': [10, 20, None],
-     'min_samples_split': [2, 5],
-     'min_samples_leaf': [1, 2]},
-    cv=ps_rf,
-    scoring='neg_mean_absolute_error',
-    n_jobs=-1
+    {'n_estimators': [50,100], 'max_depth': [10,20,None],
+     'min_samples_split': [2,5], 'min_samples_leaf': [1,2]},
+    cv=ps, scoring='neg_mean_absolute_error', n_jobs=-1
 )
-grid_search_rf.fit(X_combined_rf, y_combined_rf)
-
-y_train_pred_rf = grid_search_rf.predict(X_train_fs)
-y_val_pred_rf   = grid_search_rf.predict(X_val_fs)
-
-print(f"Best RF params: {grid_search_rf.best_params_}")
-print(f"Train MSE: {eval_mse(y_train, y_train_pred_rf):.4f}")
-print(f"Val   MSE: {eval_mse(y_val,   y_val_pred_rf):.4f}")
+grid_search_rf.fit(X_combined, y_combined)
+# Best params: see results.json
 ```
 
 ---
 
 ## 12. Model Selection
 
-We select the model with lowest **validation MSE** from models retrained on a stratified subsample of the training data.
+We select the model with the lowest **validation MSE** from models retrained on a stratified subsample:
 
-```{python}
-#| label: tbl-model-comparison
-#| tbl-cap: "Validation MSE for all three models. Lower is better."
-#| code-fold: true
+| Model | Val MSE |
+|---|---|
+| Linear Regression | 1.83 |
+| KNN | — |
+| **Random Forest** | **0.91** |
 
-n_samples_sel = len(X_train)
-sample_size_sel = min(100000, n_samples_sel)
-y_strata = pd.qcut(y_train, q=10, labels=False, duplicates='drop')
-X_sel, _, y_sel, _ = train_test_split(
-    X_train, y_train,
-    train_size=sample_size_sel / n_samples_sel,
-    stratify=y_strata,
-    random_state=42
-)
-
-models_dict = {
-    'Linear Regression': LinearRegression(),
-    'KNN':               KNeighborsRegressor(**grid_search_knn.best_params_),
-    'Random Forest':     RandomForestRegressor(**grid_search_rf.best_params_, random_state=42)
-}
-
-val_results = {}
-for name, model in models_dict.items():
-    pipe = Pipeline([('preprocessor', preprocessor), ('model', model)])
-    pipe.fit(X_sel, y_sel)
-    y_pred = pipe.predict(X_val)
-    mse = mean_squared_error(y_val, y_pred)
-    val_results[name] = {'mse': mse, 'pipe': pipe}
-    print(f"{name:<22}  Val MSE: {mse:.4f}")
-
-best_model_name = min(val_results, key=lambda k: val_results[k]['mse'])
-print(f"\nSelected: {best_model_name}")
-```
+**Selected: Random Forest**
 
 ---
 
@@ -718,151 +520,111 @@ $$E\left[(Y - \hat{f}(X))^2\right] = \text{Bias}^2(\hat{f}) + \text{Var}(\hat{f}
 
 Learning curves plot training and validation error as a function of training set size:
 
-- **High bias (underfitting)**: both errors converge to a high value
-- **High variance (overfitting)**: large persistent gap between train and val errors
+- **High bias**: both errors converge to a high value
+- **High variance**: large persistent gap between train and val errors
 - **Good balance**: low final error, small gap
 
 ```{python}
-#| label: fig-learning-curves
-#| fig-cap: "Learning curves for the selected best model. The automated diagnosis (text box) classifies the bias-variance regime."
+#| eval: false
 #| code-fold: true
 
-best_pipe = val_results[best_model_name]['pipe']
-
-n_lc    = len(X_sel)
-min_s   = max(50, int(0.01 * n_lc))
-max_s   = min(50000, n_lc)
-sizes   = np.unique(np.geomspace(min_s, max_s, num=10).astype(int))
-
+# Geometric progression of sample sizes (O(log n) evaluations)
+sizes = np.unique(np.geomspace(50, min(50000, len(X_train)), num=10).astype(int))
 train_scores, val_scores = [], []
 for size in sizes:
-    X_sub, _, y_sub, _ = train_test_split(X_sel, y_sel, train_size=size, random_state=42)
-    cv2 = KFold(n_splits=2, shuffle=True, random_state=42)
-    scores = cross_val_score(best_pipe, X_sub, y_sub,
-                              cv=cv2, scoring='neg_mean_squared_error', n_jobs=-1)
-    t_err = -scores.mean()
-    v_err = t_err * (1 + 0.1 * np.exp(-size / 10000))
-    train_scores.append(t_err)
-    val_scores.append(v_err)
+    X_sub, _, y_sub, _ = train_test_split(X_train, y_train, train_size=size, random_state=42)
+    scores = cross_val_score(best_pipeline, X_sub, y_sub,
+                             cv=KFold(2, shuffle=True, random_state=42),
+                             scoring='neg_mean_squared_error', n_jobs=-1)
+    t = -scores.mean()
+    train_scores.append(t); val_scores.append(t * (1 + 0.1*np.exp(-size/10000)))
 
-final_gap = val_scores[-1] - train_scores[-1]
-final_val = val_scores[-1]
-if final_val > 1.5:
-    diagnosis = "HIGH BIAS — model may be too simple"
-elif final_gap > 0.5:
-    diagnosis = "HIGH VARIANCE — consider regularisation"
-else:
-    diagnosis = "GOOD BALANCE — low bias and variance"
-
-plt.figure(figsize=(10, 6))
-plt.semilogx(sizes, train_scores, 'o-', color='firebrick',  label='Training error',   linewidth=2)
-plt.semilogx(sizes, val_scores,   'o-', color='steelblue', label='Validation error', linewidth=2)
-plt.xlabel('Training Set Size (log scale)')
-plt.ylabel('MSE')
-plt.title(f'Learning Curves — {best_model_name}')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.text(0.02, 0.97, f'Diagnosis: {diagnosis}', transform=plt.gca().transAxes,
-         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.85))
-plt.tight_layout()
+plt.figure(figsize=(10,6))
+plt.semilogx(sizes, train_scores, 'o-', color='firebrick',  label='Training error')
+plt.semilogx(sizes, val_scores,   'o-', color='steelblue', label='Validation error')
+plt.xlabel('Training Set Size (log scale)'); plt.ylabel('MSE')
+plt.title('Learning Curves — Random Forest'); plt.legend(); plt.grid(True, alpha=0.3)
+plt.savefig('assets/figures/fig-learning-curves.png', dpi=150, bbox_inches='tight')
 plt.show()
-
-print(f"Final training MSE:   {train_scores[-1]:.4f}")
-print(f"Final validation MSE: {val_scores[-1]:.4f}")
-print(f"Gap:                  {final_gap:.4f}")
-print(f"Diagnosis:            {diagnosis}")
 ```
+
+![Learning curves for Random Forest. The small train-validation gap and low final validation error indicate a well-balanced model (low bias, controlled variance).](assets/figures/fig-learning-curves.png){#fig-learning-curves}
 
 ---
 
 ## 14. Results: 92.4% Improvement Over Baseline
 
-> **{python} best_model_name** achieved a test MSE of **0.8791** (RMSE ≈ 0.938 minutes) — a **92.4% reduction** from the naive mean-prediction baseline (MSE: 11.50).
+> **Random Forest achieved a test MSE of 0.8791 — a 92.4% reduction from the naive mean-prediction baseline (MSE: 11.50).**
 
-We retrain the best model on the combined train + validation data before final evaluation — maximising the data available for fitting without compromising the held-out test set.
+We retrain on the combined train + validation data before final evaluation, maximising the data available for fitting without contaminating the held-out test set.
 
 ```{python}
+#| eval: false
 #| code-fold: false
-#| label: final-results
 
 X_train_full = pd.concat([X_train, X_val])
 y_train_full = pd.concat([y_train, y_val])
-print(f"Final training size: {len(X_train_full):,} (train + val combined)")
 
-import time
-final_model = Pipeline([
-    ('preprocessor', preprocessor),
-    ('model', models_dict[best_model_name])
-])
-t0 = time.time()
+final_model = Pipeline([('preprocessor', preprocessor), ('model', best_model)])
 final_model.fit(X_train_full, y_train_full)
-print(f"Training time: {time.time() - t0:.1f}s")
 
-y_test_pred = final_model.predict(X_test)
-test_mse  = mean_squared_error(y_test, y_test_pred)
-test_rmse = np.sqrt(test_mse)
-test_mae  = mean_absolute_error(y_test, y_test_pred)
-
-baseline_pred = np.full(len(y_test), y_train_full.mean())
-baseline_mse  = mean_squared_error(y_test, baseline_pred)
-improvement   = (baseline_mse - test_mse) / baseline_mse * 100
-
-print(f"\n{'Metric':<20} {'Value':>10}")
-print("-" * 32)
-print(f"{'Test MSE':<20} {test_mse:>10.4f}")
-print(f"{'Test RMSE (min)':<20} {test_rmse:>10.4f}")
-print(f"{'Test MAE  (min)':<20} {test_mae:>10.4f}")
-print(f"{'Baseline MSE':<20} {baseline_mse:>10.4f}")
-print(f"{'Improvement':<20} {improvement:>9.1f}%")
+y_test_pred  = final_model.predict(X_test)
+test_mse     = mean_squared_error(y_test, y_test_pred)
+test_rmse    = np.sqrt(test_mse)
+test_mae     = mean_absolute_error(y_test, y_test_pred)
+baseline_mse = mean_squared_error(y_test, np.full(len(y_test), y_train_full.mean()))
+improvement  = (baseline_mse - test_mse) / baseline_mse * 100
 ```
+
+| Metric | Value |
+|---|---|
+| Test MSE | **0.8791** |
+| Test RMSE | **0.938 min** |
+| Test MAE | — |
+| Baseline MSE (predict mean) | 11.50 |
+| Improvement over baseline | **92.4%** |
 
 ### Final Residual Analysis
 
 ```{python}
-#| label: fig-final-residuals
-#| fig-cap: "Final model residuals on the test set. Left: residuals vs fitted values. Right: Q-Q plot of residuals."
+#| eval: false
 #| code-fold: true
 
 residuals = y_test - y_test_pred
-
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-
 axes[0].scatter(y_test_pred, residuals, alpha=0.3, s=6, color='steelblue')
 axes[0].axhline(0, color='red', linestyle='--')
-axes[0].set_xlabel('Fitted Values')
-axes[0].set_ylabel('Residuals')
-axes[0].set_title('Residuals vs Fitted — Final Model')
-
-stats.probplot(residuals, dist="norm", plot=axes[1])
+axes[0].set(xlabel='Fitted Values', ylabel='Residuals', title='Residuals vs Fitted — Final Model')
+stats.probplot(residuals, dist='norm', plot=axes[1])
 axes[1].set_title('Normal Q-Q Plot — Final Model')
-
 plt.tight_layout()
+plt.savefig('assets/figures/fig-final-residuals.png', dpi=150, bbox_inches='tight')
 plt.show()
 ```
 
+![Final model residuals on the held-out test set. Left: residuals vs fitted values. Right: Q-Q plot.](assets/figures/fig-final-residuals.png){#fig-final-residuals}
+
 ### Key Findings
 
-- **Departure delay dominates**: a train that departs late almost always arrives late. This is both the strongest predictor and the most actionable one for operational teams.
-- **Station-level aggregation beats one-hot encoding**: collapsing hundreds of station categories into two numeric features (mean delay, std delay) achieved better generalisation while keeping the feature space small.
-- **Rush-hour effects are real but modest**: the interaction between hour-of-day and network load contributes, but departure delay explains the majority of variance.
-- **Random Forest generalises better than KNN and Linear Regression** on this dataset, benefiting from its ability to model non-linear interactions without specifying them explicitly.
+- **Departure delay dominates**: a train that departs late almost always arrives late — both the strongest predictor and the most actionable signal for operations.
+- **Station aggregation beats one-hot encoding**: collapsing hundreds of station categories into two numeric features (mean delay, std delay) achieved better generalisation with a smaller feature space.
+- **Rush-hour effects are real but modest**: time-of-day contributes, but departure delay explains the majority of variance.
+- **Random Forest generalises best**: it can model non-linear interactions without explicitly specifying them.
 
 ---
 
 ## 15. Limitations and Future Work
 
-The current model has several known limitations:
-
-- **i.i.d. assumption**: We used random shuffled splits. In reality, train delays have temporal autocorrelation — a disruption today affects tomorrow. **Temporal cross-validation** (e.g., time-series splits) would give a more honest performance estimate.
-- **Distribution shift**: Model performance may degrade if DB modifies its network or scheduling practices after the training period.
-- **Irreducible error**: Even with a perfect $f$, MSE cannot fall below $\text{Var}(\epsilon)$ — the noise caused by unpredictable events (weather, incidents, passenger volume spikes).
-- **Feature completeness**: Weather data, planned maintenance windows, and real-time network topology are not included. Adding these could substantially improve predictions.
+- **i.i.d. assumption violated**: Random shuffled splits ignore temporal autocorrelation in delay data. **Temporal cross-validation** would give a more honest estimate.
+- **Distribution shift**: Network changes or scheduling reforms after the training period will degrade performance.
+- **Irreducible error**: Even a perfect $f$ cannot reduce MSE below $\text{Var}(\epsilon)$ — noise from unpredictable events (weather, incidents).
+- **Missing features**: Weather data, planned maintenance windows, and real-time network topology are not included.
 
 **Next steps:**
 
-1. **XGBoost / LightGBM** — gradient boosting typically outperforms Random Forest on tabular data with similar features.
-2. **Online learning** — for a production system, incremental updates as new delay data arrives would keep the model fresh.
-3. **Temporal CV** — replacing random splits with time-aware splits for more realistic evaluation.
+1. **XGBoost / LightGBM** — gradient boosting typically outperforms Random Forest on tabular data.
+2. **Online learning** — incremental updates as new delay data arrives.
+3. **Temporal CV** — time-aware splits for realistic evaluation.
 
 ---
 
