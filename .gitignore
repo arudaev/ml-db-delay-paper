@@ -1,0 +1,25 @@
+# Quarto build outputs (served from _site, not committed)
+_site/
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+
+# Data — never commit the 2M-row CSV
+data/
+*.csv
+*.parquet
+
+# Kaggle credentials
+kaggle.json
+.kaggle/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db

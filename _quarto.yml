@@ -1,0 +1,41 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Predicting Deutsche Bahn Train Delays"
+  description: "Supervised regression on 2M+ records — Linear Regression, KNN, and Random Forest"
+  navbar: false
+  page-footer:
+    left: "Alexander Rudaev, Sameer, Fares · TH Deggendorf · 2025"
+    right: "Built with [Quarto](https://quarto.org)"
+
+execute:
+  freeze: auto
+  echo: true
+  warning: false
+  message: false
+
+format:
+  html:
+    theme:
+      light: flatly
+    highlight-style: github
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: false
+    fig-width: 10
+    fig-height: 6
+    fig-align: center
+    df-print: paged
+    smooth-scroll: true
+    anchor-sections: true
+    grid:
+      body-width: 900px
+
+bibliography: references.bib
