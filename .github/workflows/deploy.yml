@@ -26,9 +26,9 @@ jobs:
         with:
           version: 1.4.550
 
-      # No Python install needed.
-      # _freeze/ is committed — Quarto reads cached outputs and renders HTML
-      # without downloading data or re-running any model training.
+      - name: Install Jupyter (required by Quarto even with eval:false)
+        run: pip install jupyter nbformat
+
       - name: Render Quarto site
         run: quarto render
 
