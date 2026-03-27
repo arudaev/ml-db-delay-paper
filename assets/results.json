@@ -1,0 +1,22 @@
+{
+  "best_model": "Random Forest",
+  "test_mse": 0.7501,
+  "test_rmse": 0.8661,
+  "test_mae": 0.2705,
+  "baseline_mse": 11.5094,
+  "improvement_pct": 93.5,
+  "lr_val_mse": 1.0347,
+  "optimal_features": 16,
+  "best_knn_params": {
+    "metric": "euclidean",
+    "n_neighbors": 9,
+    "weights": "distance"
+  },
+  "best_rf_params": {
+    "max_depth": null,
+    "min_samples_leaf": 2,
+    "min_samples_split": 5,
+    "n_estimators": 100
+  },
+  "bias_variance_diagnosis": "GOOD BALANCE \u2014 low bias and variance"
+}

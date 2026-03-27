@@ -4,11 +4,11 @@ subtitle: "Supervised Regression on 2,061,357 Records"
 author:
   - name: Alexander Rudaev
     affiliation: TH Deggendorf
-  - name: Sameer
+  - name: Sameer Kumar
     affiliation: TH Deggendorf
-  - name: Fares
+  - name: Fares Elbermawy
     affiliation: TH Deggendorf
-date: "2025"
+date: "2025-08-08"
 abstract: |
   We trained three regression models — Linear Regression, K-Nearest Neighbors,
   and Random Forest — to predict Deutsche Bahn arrival delays from 2,061,357
