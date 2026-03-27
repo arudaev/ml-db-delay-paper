@@ -10,9 +10,9 @@ Live site: https://arudaev.github.io/ml-db-delay-paper/
 
 | Layer | File | Purpose |
 |---|---|---|
-| Computation | `notebooks/analysis.ipynb` | Run once in Google Colab (GPU). Saves 6 PNGs + `results.json`. |
+| Computation | `notebooks/analysis.ipynb` | Run once in Google Colab (T4 GPU). Saves 6 PNGs + `results.json`. |
 | Paper | `index.qmd` | Quarto document — code shown (`eval:false`), figures from `assets/figures/`. |
-| CI | `.github/workflows/deploy.yml` | Renders `index.qmd` with Quarto only (no Python). Deploys to GitHub Pages. |
+| CI | `.github/workflows/deploy.yml` | Installs `jupyter nbformat`, renders `index.qmd`, deploys to GitHub Pages. |
 
 ---
 
@@ -20,14 +20,14 @@ Live site: https://arudaev.github.io/ml-db-delay-paper/
 
 1. Open [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb) in Google Colab
 2. **Runtime → Change runtime type → T4 GPU**
-3. Add your Kaggle API token: in the first cell, add `import os; os.environ['KAGGLE_API_TOKEN'] = 'your-token-here'`
+3. Upload your `kaggle.json` via **Files panel → Upload**, or configure it through the Kaggle secrets UI
 4. **Run all cells** (~10–15 min on T4)
 5. From the **Files panel** (left sidebar), download:
    - `assets/figures/*.png` (6 files)
    - `assets/results.json`
 6. Place them in the repo at the same paths
 7. `git add assets/ && git commit -m "Update figures from Colab run" && git push`
-8. GitHub Actions deploys the paper in ~15 seconds
+8. GitHub Actions deploys the paper in ~2 min
 
 ---
 
@@ -35,9 +35,9 @@ Live site: https://arudaev.github.io/ml-db-delay-paper/
 
 ```bash
 # Install Quarto: https://quarto.org/docs/get-started/
+pip install jupyter nbformat
 quarto render index.qmd
-# Opens _site/index.html
-# Note: figures show as broken until assets/ is populated from a Colab run
+# Open _site/index.html
 ```
 
 ---
