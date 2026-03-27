@@ -44,4 +44,4 @@ quarto render index.qmd
 
 ## Part of
 
-This repo is a git submodule of [HlexNC/Painfully-Trivial](https://github.com/HlexNC/Painfully-Trivial).
+This repo is a git submodule of [arudaev/Painfully-Trivial](https://github.com/arudaev/Painfully-Trivial?tab=readme-ov-file).
