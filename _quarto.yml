@@ -6,6 +6,12 @@ project:
 
 website:
   title: "Predicting Deutsche Bahn Train Delays"
+  site-url: "https://arudaev.github.io/ml-db-delay-paper/"
+  favicon: assets/favicon.svg
+  open-graph:
+    locale: en_US
+  twitter-card:
+    card-style: summary_large_image
   description: "Supervised regression on 2M+ records — Linear Regression, KNN, and Random Forest"
   navbar: false
   page-footer:
@@ -20,6 +26,7 @@ execute:
 
 format:
   html:
+    include-in-header: _includes/social-meta.html
     theme:
       light: flatly
     highlight-style: github
