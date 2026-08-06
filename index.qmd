@@ -1,6 +1,8 @@
 ---
 title: "Predicting Deutsche Bahn Train Delays"
 subtitle: "Supervised Regression on 2,061,357 Records"
+description: "Research report on predicting Deutsche Bahn arrival delays with Linear Regression, KNN, and Random Forest across 2,061,357 timetable records."
+image: assets/og-report.png
 author:
   - name: Alexander Rudaev
     affiliation: TH Deggendorf
