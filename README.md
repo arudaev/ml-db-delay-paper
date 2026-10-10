@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/banner.png" alt="Deutsche Bahn Delay Predictor – a hand-drawn banner: a regional train at a platform with an empty departure board" width="100%">
+</p>
+
 # ml-db-delay-paper
 
 A Quarto research paper: **Predicting Deutsche Bahn Train Delays**.
@@ -11,7 +15,7 @@ Live site: https://arudaev.github.io/ml-db-delay-paper/
 | Layer | File | Purpose |
 |---|---|---|
 | Computation | `notebooks/analysis.ipynb` | Run once in Google Colab (T4 GPU). Saves 6 PNGs + `results.json`. |
-| Paper | `index.qmd` | Quarto document — code shown (`eval:false`), figures from `assets/figures/`. |
+| Paper | `index.qmd` | Quarto document – code shown (`eval:false`), figures from `assets/figures/`. |
 | CI | `.github/workflows/deploy.yml` | Installs `jupyter nbformat`, renders `index.qmd`, deploys to GitHub Pages. |
 
 ---
